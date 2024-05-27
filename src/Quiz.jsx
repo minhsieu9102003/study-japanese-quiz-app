@@ -2,39 +2,38 @@
 import React, { useState, useEffect } from 'react';
 import './Quiz.css';
 
-const Quiz = ({ language }) => {
+const Quiz = ({ selectedFile }) => {
     const [words, setWords] = useState([]);
     const [currentWordIndex, setCurrentWordIndex] = useState(null);
     const [options, setOptions] = useState([]);
     const [selectedOption, setSelectedOption] = useState(null);
     const [isCorrect, setIsCorrect] = useState(null);
     const [showPronounce, setShowPronounce] = useState(false);
+    const [familiarWords, setFamiliarWords] = useState(new Set());
 
     useEffect(() => {
         const fetchData = async () => {
-            const response = await fetch(`/data_${language}.json`);
+            const response = await fetch(`/${selectedFile}`);
             const data = await response.json();
             setWords(data);
-            if (currentWordIndex !== null) {
-                // Generate options using the current index without shuffling
-                const correctWord = data[currentWordIndex];
-                const start = Math.max(0, currentWordIndex - 3);
-                const end = Math.min(data.length, currentWordIndex + 4);
-                const nearestWords = data.slice(start, end).filter(word => word.word !== correctWord.word);
-                let newOptions = [correctWord, ...nearestWords.slice(0, 3)];
-                setOptions(newOptions);
-            } else {
-                const initialIndex = getRandomIndex(data.length);
-                setCurrentWordIndex(initialIndex);
-                generateOptions(data, initialIndex);
-            }
+
+            const initialIndex = getRandomIndex(data.length, new Set());
+            setCurrentWordIndex(initialIndex);
+            generateOptions(data, initialIndex);
         };
 
-        fetchData();
-    }, [language]);
+        const storedFamiliarWords = JSON.parse(localStorage.getItem('familiarWords')) || [];
+        setFamiliarWords(new Set(storedFamiliarWords));
 
-    const getRandomIndex = (length) => {
-        return Math.floor(Math.random() * length);
+        fetchData();
+    }, [selectedFile]);
+
+    const getRandomIndex = (length, excludedIndices) => {
+        let index;
+        do {
+            index = Math.floor(Math.random() * length);
+        } while (excludedIndices.has(index));
+        return index;
     };
 
     const generateOptions = (words, index) => {
@@ -60,11 +59,23 @@ const Quiz = ({ language }) => {
     };
 
     const handleNext = () => {
-        const nextIndex = getRandomIndex(words.length);
+        const nextIndex = getRandomIndex(words.length, familiarWords);
         setCurrentWordIndex(nextIndex);
         generateOptions(words, nextIndex);
         setSelectedOption(null);
         setIsCorrect(null);
+    };
+
+    const handleCheckboxChange = () => {
+        const newFamiliarWords = new Set(familiarWords);
+        const currentWord = words[currentWordIndex].word;
+        if (newFamiliarWords.has(currentWord)) {
+            newFamiliarWords.delete(currentWord);
+        } else {
+            newFamiliarWords.add(currentWord);
+        }
+        setFamiliarWords(newFamiliarWords);
+        localStorage.setItem('familiarWords', JSON.stringify(Array.from(newFamiliarWords)));
     };
 
     if (words.length === 0) return <div>Loading...</div>;
@@ -93,6 +104,15 @@ const Quiz = ({ language }) => {
                     Next
                 </button>
             )}
+            <div className="checkbox-container">
+                <input
+                    type="checkbox"
+                    id="familiar-checkbox"
+                    checked={familiarWords.has(currentWord.word)}
+                    onChange={handleCheckboxChange}
+                />
+                <label htmlFor="familiar-checkbox">Mark as familiar</label>
+            </div>
         </div>
     );
 };
